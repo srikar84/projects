@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VocabVoice — Simple Voice Vocabulary Tutor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Subtle pulse animation when microphone is actively listening */
+        @keyframes softPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.35); }
+            50% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(225, 29, 72, 0); }
+        }
+        .mic-listening {
+            animation: softPulse 1.6s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col items-center py-8 sm:py-12 px-4 selection:bg-indigo-100 selection:text-indigo-900">
+
+    <!-- Main Centered Single-Column Container -->
+    <div class="w-full max-w-xl flex flex-col gap-6">
+
+        <!-- Minimal Header -->
+        <header class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                    <i data-lucide="volume-2" class="w-4 h-4"></i>
+                </div>
+                <span class="font-bold text-lg tracking-tight text-slate-900">VocabVoice</span>
+            </div>
+
+            <!-- Auto-Voice Output Toggle -->
+            <button onclick="toggleAutoSpeak()" id="voiceToggleBtn" class="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm transition-colors">
+                <i data-lucide="volume-2" id="voiceToggleIcon" class="w-3.5 h-3.5 text-indigo-600"></i>
+                <span id="voiceToggleText">Voice On</span>
+            </button>
+        </header>
+
+        <!-- 1. Top Word Input Bar -->
+        <section class="flex flex-col gap-3">
+            <form onsubmit="handleWordSearch(event)" class="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200/90 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 ml-3 shrink-0"></i>
+                <input
+                    type="text"
+                    id="wordSearchInput"
+                    placeholder="Type any word to learn..."
+                    autocomplete="off"
+                    class="flex-1 bg-transparent text-sm sm:text-base text-slate-900 placeholder-slate-400 py-2 px-1 focus:outline-none"
+                >
+                <button type="submit" id="exploreBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors shrink-0 flex items-center gap-1.5">
+                    <span>Explore Word</span>
+                </button>
+            </form>
+
+            <!-- Subtle Quick Example Word Chips -->
+            <div class="flex flex-wrap items-center gap-2 px-1">
+                <span class="text-xs text-slate-400">Try:</span>
+                <button onclick="exploreWord('Ephemeral')" class="text-xs font-medium text-slate-600 hover:text-indigo-600 bg-white hover:bg-indigo-50/60 border border-slate-200/80 px-3 py-1 rounded-full transition-colors">
+                    Ephemeral
+                </button>
+                <button onclick="exploreWord('Resilient')" class="text-xs font-medium text-slate-600 hover:text-indigo-600 bg-white hover:bg-indigo-50/60 border border-slate-200/80 px-3 py-1 rounded-full transition-colors">
+                    Resilient
+                </button>
+                <button onclick="exploreWord('Pragmatic')" class="text-xs font-medium text-slate-600 hover:text-indigo-600 bg-white hover:bg-indigo-50/60 border border-slate-200/80 px-3 py-1 rounded-full transition-colors">
+                    Pragmatic
+                </button>
+                <button onclick="exploreWord('Ubiquitous')" class="text-xs font-medium text-slate-600 hover:text-indigo-600 bg-white hover:bg-indigo-50/60 border border-slate-200/80 px-3 py-1 rounded-full transition-colors">
+                    Ubiquitous
+                </button>
+            </div>
+        </section>
+
+        <!-- 2. Word Display Card -->
+        <section id="wordCard" class="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 transition-all">
+            <!-- Loading State Overlay -->
+            <div id="wordLoadingState" class="hidden py-10 flex flex-col items-center justify-center text-center gap-3">
+                <div class="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-sm text-slate-500 font-medium">Looking up word & pronunciation...</p>
+            </div>
+
+            <!-- Word Content -->
+            <div id="wordCardContent">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <div class="flex items-baseline gap-2.5 flex-wrap">
+                            <h1 id="displayWord" class="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+                                Ephemeral
+                            </h1>
+                            <span id="displayPos" class="text-xs font-medium italic text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                                adjective
+                            </span>
+                        </div>
+                        <p id="displayPhonetic" class="text-sm font-mono text-indigo-600 mt-1">
+                            /ɪˈfɛm.ər.əl/
+                        </p>
+                    </div>
+
+                    <!-- Prominent Listen Button for the Word -->
+                    <button onclick="speakWordOnly()" class="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-2xl transition-colors shrink-0">
+                        <i data-lucide="volume-2" class="w-4 h-4"></i>
+                        <span>Listen</span>
+                    </button>
+                </div>
+
+                <!-- Definition -->
+                <div class="mt-6">
+                    <p id="displayDefinition" class="text-slate-700 text-base leading-relaxed">
+                        Lasting for a very short time; fleeting or temporary.
+                    </p>
+                </div>
+
+                <!-- Everyday Example Sentence -->
+                <div class="mt-5 pt-5 border-t border-slate-100 flex items-start justify-between gap-3">
+                    <p id="displayExample" class="text-slate-600 text-sm italic leading-relaxed">
+                        "Fame on social media can often be ephemeral, fading as quickly as it arrives."
+                    </p>
+                    <button onclick="speakExampleOnly()" title="Listen to example sentence" class="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-3 py-1.5 rounded-xl transition-colors shrink-0">
+                        <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+                        <span>Listen</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. Voice Practice & Minimal AI Tutor -->
+        <section class="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 flex flex-col items-center text-center gap-4">
+            <!-- Central Microphone Button -->
+            <button
+                id="micBtn"
+                onclick="toggleMic()"
+                class="w-16 h-16 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 flex items-center justify-center transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/25"
+                aria-label="Tap to Speak"
+            >
+                <i data-lucide="mic" id="micIcon" class="w-7 h-7"></i>
+            </button>
+
+            <div>
+                <p id="micStatusLabel" class="text-sm font-semibold text-slate-800">
+                    Tap to Speak
+                </p>
+                <p id="micSubLabel" class="text-xs text-slate-500 mt-0.5">
+                    Say "<span id="promptTargetWord" class="font-medium text-slate-700">Ephemeral</span>", use it in a sentence, or ask a question
+                </p>
+                <p id="liveInterimText" class="text-xs text-indigo-600 italic min-h-[18px] mt-1"></p>
+            </div>
+
+            <!-- Clean Minimal Transcript Bubble -->
+            <div id="tutorResponseBox" class="w-full bg-slate-50 border border-slate-200/70 rounded-2xl p-4 text-left transition-all">
+                <div id="userSpokenRow" class="hidden mb-2.5 pb-2.5 border-b border-slate-200/70">
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">You said</span>
+                    <p id="userSpokenText" class="text-xs sm:text-sm text-slate-700 mt-0.5"></p>
+                </div>
+
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-indigo-600">VocabVoice Tutor</span>
+                        <p id="tutorReplyText" class="text-sm text-slate-700 leading-relaxed mt-0.5">
+                            Tap the mic and try saying "Ephemeral" aloud, or use it in a short sentence!
+                        </p>
+                    </div>
+                    <button onclick="replayTutorReply()" title="Listen again" class="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-white transition-colors shrink-0 mt-1">
+                        <i data-lucide="volume-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Small Text Input Fallback -->
+            <form onsubmit="handleTextPractice(event)" class="w-full flex items-center gap-2 mt-1">
+                <input
+                    type="text"
+                    id="practiceTextInput"
+                    placeholder="Or type a sentence using this word..."
+                    autocomplete="off"
+                    class="flex-1 bg-slate-100/80 focus:bg-white text-xs sm:text-sm text-slate-800 placeholder-slate-400 px-4 py-2.5 rounded-xl border border-transparent focus:border-indigo-500 focus:outline-none transition-all"
+                >
+                <button type="submit" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors shrink-0">
+                    Send
+                </button>
+            </form>
+        </section>
+
+    </div>
+
+    <!-- Subtle Toast Message -->
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity duration-200">
+        Message
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. STATE & PRESET WORDS
+        // ==========================================
+        const PRESET_WORDS = {
+            ephemeral: {
+                word: "Ephemeral",
+                phonetic: "/ɪˈfɛm.ər.əl/",
+                partOfSpeech: "adjective",
+                definition: "Lasting for a very short time; fleeting or temporary.",
+                example: "Fame on social media can often be ephemeral, fading as quickly as it arrives."
+            },
+            resilient: {
+                word: "Resilient",
+                phonetic: "/rɪˈzɪl.jənt/",
+                partOfSpeech: "adjective",
+                definition: "Able to recover quickly from difficult conditions or setbacks.",
+                example: "Small businesses proved remarkably resilient during tough economic times."
+            },
+            pragmatic: {
+                word: "Pragmatic",
+                phonetic: "/præɡˈmæt.ɪk/",
+                partOfSpeech: "adjective",
+                definition: "Dealing with things sensibly and realistically based on practical considerations.",
+                example: "She took a pragmatic approach and focused on the simplest solution first."
+            },
+            ubiquitous: {
+                word: "Ubiquitous",
+                phonetic: "/juːˈbɪk.wɪ.təs/",
+                partOfSpeech: "adjective",
+                definition: "Present, appearing, or found everywhere.",
+                example: "Coffee shops have become ubiquitous on almost every city corner."
+            }
+        };
+
+        const state = {
+            currentWord: PRESET_WORDS.ephemeral,
+            autoSpeak: true,
+            isListening: false,
+            lastTutorReply: 'Tap the mic and try saying "Ephemeral" aloud, or use it in a short sentence!'
+        };
+
+        const apiKey = ""; // Injected automatically at runtime
+        const GEMINI_MODEL = "gemini-3-flash-preview";
+
+        // ==========================================
+        // 2. GEMINI API CALLS (WORD LOOKUP & TUTOR)
+        // ==========================================
+        async function fetchWithBackoff(url, payload) {
+            let delay = 1000;
+            for (let attempt = 0; attempt < 4; attempt++) {
+                try {
+                    const res = await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return await res.json();
+                } catch (err) {
+                    if (attempt === 3) throw err;
+                    await new Promise(r => setTimeout(r, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        // Look up any word typed by the user
+        async function exploreWord(rawWord) {
+            const cleaned = rawWord.trim();
+            if (!cleaned) return;
+
+            document.getElementById('wordSearchInput').value = cleaned;
+            const key = cleaned.toLowerCase();
+
+            // Instant load if it's one of the starter chips
+            if (PRESET_WORDS[key]) {
+                state.currentWord = PRESET_WORDS[key];
+                renderWordCard();
+                resetTutorBubble(`Try saying "${state.currentWord.word}" aloud, or use it in a short sentence!`);
+                if (state.autoSpeak) speakText(state.currentWord.word);
+                return;
+            }
+
+            setWordLoading(true);
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{
+                    parts: [{
+                        text: `Provide clear, beginner-friendly dictionary details for the English word or phrase: "${cleaned}".`
+                    }]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            word: { type: "STRING", description: "Properly capitalized word" },
+                            phonetic: { type: "STRING", description: "IPA phonetic spelling, e.g. /ɪˈfɛm.ər.əl/" },
+                            partOfSpeech: { type: "STRING", description: "e.g. noun, verb, adjective, adverb" },
+                            definition: { type: "STRING", description: "Clear, simple 1-sentence definition" },
+                            example: { type: "STRING", description: "1 natural everyday example sentence using the word" }
+                        },
+                        required: ["word", "phonetic", "partOfSpeech", "definition", "example"]
+                    }
+                }
+            };
+
+            try {
+                const data = await fetchWithBackoff(url, payload);
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("No response");
+
+                const wordData = JSON.parse(text);
+                state.currentWord = wordData;
+                setWordLoading(false);
+                renderWordCard();
+                resetTutorBubble(`Try saying "${wordData.word}" aloud, or use it in a short sentence!`);
+
+                if (state.autoSpeak) {
+                    speakText(wordData.word);
+                }
+            } catch (err) {
+                setWordLoading(false);
+                showToast("Couldn't look up that word right now. Please try again.");
+            }
+        }
+
+        // Send user's spoken or typed practice to Gemini Tutor
+        async function evaluatePracticeWithGemini(userText) {
+            const w = state.currentWord;
+            document.getElementById('userSpokenRow').classList.remove('hidden');
+            document.getElementById('userSpokenText').textContent = userText;
+            document.getElementById('tutorReplyText').textContent = "Thinking...";
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+            const systemInstruction = `You are VocabVoice, a warm, concise voice vocabulary tutor.
+Current word: "${w.word}" (${w.partOfSpeech}) — Definition: "${w.definition}".
+The learner just spoke or typed: "${userText}".
+Respond in 1 to 2 short, natural spoken sentences (no markdown, no bullet points):
+- If they just practiced saying the word, encourage their pronunciation and invite them to try a sentence.
+- If they used the word in a sentence, tell them warmly if they used it right, or gently show a natural fix.
+- If they asked a question about the word, answer clearly and simply.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userText }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] }
+            };
+
+            try {
+                const data = await fetchWithBackoff(url, payload);
+                const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+                    || `Nice effort with "${w.word}"! Try using it in another everyday sentence.`;
+
+                state.lastTutorReply = reply;
+                document.getElementById('tutorReplyText').textContent = reply;
+
+                if (state.autoSpeak) {
+                    speakText(reply);
+                }
+            } catch (err) {
+                const fallback = `Nice try! Keep practicing "${w.word}" in a sentence whenever you're ready.`;
+                state.lastTutorReply = fallback;
+                document.getElementById('tutorReplyText').textContent = fallback;
+            }
+        }
+
+        // ==========================================
+        // 3. WEB SPEECH API (TTS & STT)
+        // ==========================================
+        function speakText(text, rate = 0.96) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = rate;
+
+            const voices = window.speechSynthesis.getVoices();
+            const preferred = voices.find(v =>
+                v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha'))
+            ) || voices.find(v => v.lang.startsWith('en'));
+            if (preferred) utterance.voice = preferred;
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function speakWordOnly() {
+            speakText(state.currentWord.word, 0.9);
+        }
+
+        function speakExampleOnly() {
+            speakText(state.currentWord.example, 0.95);
+        }
+
+        function replayTutorReply() {
+            speakText(state.lastTutorReply, 0.98);
+        }
+
+        function toggleAutoSpeak() {
+            state.autoSpeak = !state.autoSpeak;
+            const icon = document.getElementById('voiceToggleIcon');
+            const label = document.getElementById('voiceToggleText');
+
+            if (state.autoSpeak) {
+                icon.setAttribute('data-lucide', 'volume-2');
+                icon.classList.add('text-indigo-600');
+                label.textContent = "Voice On";
+                showToast("Voice output enabled");
+            } else {
+                window.speechSynthesis.cancel();
+                icon.setAttribute('data-lucide', 'volume-x');
+                icon.classList.remove('text-indigo-600');
+                label.textContent = "Muted";
+                showToast("Voice output muted");
+            }
+            lucide.createIcons();
+        }
+
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                state.isListening = true;
+                updateMicUI();
+            };
+
+            recognition.onresult = (event) => {
+                let interim = '';
+                let finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                document.getElementById('liveInterimText').textContent = interim || finalTranscript;
+
+                if (finalTranscript.trim()) {
+                    evaluatePracticeWithGemini(finalTranscript.trim());
+                }
+            };
+
+            recognition.onerror = (event) => {
+                state.isListening = false;
+                updateMicUI();
+                if (event.error === 'not-allowed') {
+                    showToast("Microphone blocked. You can type your sentence below!");
+                } else if (event.error !== 'aborted') {
+                    showToast("Didn't catch that. Tap the mic to try again.");
+                }
+            };
+
+            recognition.onend = () => {
+                state.isListening = false;
+                updateMicUI();
+                setTimeout(() => {
+                    document.getElementById('liveInterimText').textContent = "";
+                }, 1200);
+            };
+        }
+
+        function toggleMic() {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+            if (!recognition) {
+                showToast("Voice input isn't supported in this browser. Type below instead!");
+                document.getElementById('practiceTextInput').focus();
+                return;
+            }
+
+            if (state.isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    recognition.stop();
+                }
+            }
+        }
+
+        // ==========================================
+        // 4. UI HELPERS & EVENT HANDLERS
+        // ==========================================
+        function handleWordSearch(event) {
+            event.preventDefault();
+            const val = document.getElementById('wordSearchInput').value;
+            exploreWord(val);
+        }
+
+        function handleTextPractice(event) {
+            event.preventDefault();
+            const input = document.getElementById('practiceTextInput');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            evaluatePracticeWithGemini(text);
+        }
+
+        function renderWordCard() {
+            const w = state.currentWord;
+            document.getElementById('displayWord').textContent = w.word;
+            document.getElementById('displayPos').textContent = w.partOfSpeech;
+            document.getElementById('displayPhonetic').textContent = w.phonetic;
+            document.getElementById('displayDefinition').textContent = w.definition;
+            document.getElementById('displayExample').textContent = `"${w.example}"`;
+            document.getElementById('promptTargetWord').textContent = w.word;
+        }
+
+        function resetTutorBubble(promptMessage) {
+            state.lastTutorReply = promptMessage;
+            document.getElementById('userSpokenRow').classList.add('hidden');
+            document.getElementById('tutorReplyText').textContent = promptMessage;
+        }
+
+        function setWordLoading(isLoading) {
+            const loader = document.getElementById('wordLoadingState');
+            const content = document.getElementById('wordCardContent');
+            if (isLoading) {
+                loader.classList.remove('hidden');
+                content.classList.add('hidden');
+            } else {
+                loader.classList.add('hidden');
+                content.classList.remove('hidden');
+            }
+        }
+
+        function updateMicUI() {
+            const btn = document.getElementById('micBtn');
+            const label = document.getElementById('micStatusLabel');
+
+            if (state.isListening) {
+                btn.className = "w-16 h-16 rounded-full bg-rose-600 text-white shadow-md flex items-center justify-center transition-all mic-listening";
+                label.textContent = "Listening... Tap to stop";
+                label.classList.add('text-rose-600');
+            } else {
+                btn.className = "w-16 h-16 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 flex items-center justify-center transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/25";
+                label.textContent = "Tap to Speak";
+                label.classList.remove('text-rose-600');
+            }
+        }
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.remove('opacity-0');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => el.classList.add('opacity-0'), 2800);
+        }
+
+        window.onload = () => {
+            lucide.createIcons();
+            renderWordCard();
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.getVoices();
+            }
+        };
+    </script>
+</body>
+</html>
